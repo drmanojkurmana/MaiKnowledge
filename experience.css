@@ -1,0 +1,66 @@
+/* experience.css — Living Brain WebGL layer, integrated BEHIND the full site content. */
+
+/* ---- WebGL canvas: fixed, full-viewport, behind everything ---- */
+.brain-stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+  background: #000;
+}
+
+/* Content sits above the brain. Make the section backgrounds transparent so the
+   living brain shows through the whole page (the CSS vars are declared inline on
+   #mk-root; !important in a stylesheet overrides an inline custom property). */
+#mk-root {
+  position: relative;
+  z-index: 1;
+  --bg: transparent !important;
+  --bg-alt: transparent !important;
+  --hero-bg: transparent !important;
+  background: transparent !important;
+}
+
+/* The old 2-D hero canvas is replaced by the WebGL brain. */
+#mk-hero-canvas { display: none !important; }
+
+/* Give text sitting over the brain a subtle legibility lift. */
+#mk-root h1, #mk-root h2, #mk-root h3, #mk-root p, #mk-root li {
+  text-shadow: 0 1px 20px rgba(0, 0, 0, 0.55);
+}
+
+/* ---- Loader ---- */
+#brain-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transition: opacity 0.85s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+#brain-loader.done { opacity: 0; pointer-events: none; }
+.loader-mark { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: #f5f5f7; display: inline-flex; align-items: baseline; }
+.loader-mark .lm-b {
+  font-family: 'Sacramento', cursive;
+  font-size: 42px;
+  margin-left: -1px;
+  padding-right: 7px;
+  background: linear-gradient(105deg, #8fb0ff, #2997ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.loader-pct { font-variant-numeric: tabular-nums; color: #a1a1a6; font-size: 14px; letter-spacing: 0.04em; }
+
+@media (prefers-reduced-motion: reduce) {
+  #brain-loader { transition: none; }
+}
