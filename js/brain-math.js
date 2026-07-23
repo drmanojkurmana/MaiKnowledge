@@ -18,34 +18,30 @@ export function mulberry32(seed) {
 }
 
 // Uniform area-weighted sampling across triangles (positions = non-indexed triples).
+// Uses a cumulative-area table + binary search so it stays O(count · log tris).
 export function sampleSurfacePoints(positions, count, rng) {
   const triCount = positions.length / 9;
-  const areas = new Float32Array(triCount);
+  const cum = new Float32Array(triCount); // prefix sum of triangle areas
   let total = 0;
-  const ax = [0, 0, 0], bx = [0, 0, 0], cx = [0, 0, 0];
   for (let t = 0; t < triCount; t++) {
     const o = t * 9;
-    for (let j = 0; j < 3; j++) {
-      ax[j] = positions[o + j];
-      bx[j] = positions[o + 3 + j];
-      cx[j] = positions[o + 6 + j];
-    }
-    const e1 = [bx[0] - ax[0], bx[1] - ax[1], bx[2] - ax[2]];
-    const e2 = [cx[0] - ax[0], cx[1] - ax[1], cx[2] - ax[2]];
-    const cxp = [
-      e1[1] * e2[2] - e1[2] * e2[1],
-      e1[2] * e2[0] - e1[0] * e2[2],
-      e1[0] * e2[1] - e1[1] * e2[0],
-    ];
-    const area = 0.5 * Math.hypot(cxp[0], cxp[1], cxp[2]);
-    areas[t] = area;
-    total += area;
+    const ax = positions[o], ay = positions[o + 1], az = positions[o + 2];
+    const bx = positions[o + 3], by = positions[o + 4], bz = positions[o + 5];
+    const cx = positions[o + 6], cy = positions[o + 7], cz = positions[o + 8];
+    const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+    const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+    const crx = e1y * e2z - e1z * e2y;
+    const cry = e1z * e2x - e1x * e2z;
+    const crz = e1x * e2y - e1y * e2x;
+    total += 0.5 * Math.hypot(crx, cry, crz);
+    cum[t] = total;
   }
   const out = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    let r = rng() * total, t = 0;
-    while (t < triCount - 1 && (r -= areas[t]) > 0) t++;
-    const o = t * 9;
+    const r = rng() * total;
+    let lo = 0, hi = triCount - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < r) lo = m + 1; else hi = m; }
+    const o = lo * 9;
     let u = rng(), v = rng();
     if (u + v > 1) { u = 1 - u; v = 1 - v; }
     const w = 1 - u - v;

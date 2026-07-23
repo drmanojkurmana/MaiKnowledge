@@ -27,7 +27,7 @@ async function boot() {
   loader.finish();
 
   const choreo = new ScrollChoreography(stage, {
-    onBeat: (i) => document.documentElement.setAttribute('data-beat', String(i)),
+    onSection: (i, id) => document.documentElement.setAttribute('data-brain-section', id || String(i)),
   });
   choreo.start();
   window.__brainChoreo = choreo;

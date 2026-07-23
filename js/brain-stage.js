@@ -1,22 +1,19 @@
-// brain-stage.js — Three.js scene: brain shell + particle synapses + postfx + interaction.
+// brain-stage.js — Three.js scene: anatomical brain (cerebrum + cerebellum + brainstem)
+// as glowing wireframe shell + firing particle synapses, with postprocessing (bloom,
+// vignette/grain/chromatic, depth-of-field), cursor synapse bursts, and a click pulse.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { pickTier, TIER_SETTINGS } from './quality.js';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32, lerpKeyframes } from './brain-math.js';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js';
 
-const CAMERA_KEYFRAMES = [
-  { at: 0.0,  camX: 0.0,  camZ: 6.2, rotOffset: 0.0, bloom: 0.55 },
-  { at: 0.2,  camX: 1.7,  camZ: 4.8, rotOffset: 0.6, bloom: 0.7 },
-  { at: 0.45, camX: -1.7, camZ: 4.8, rotOffset: 1.4, bloom: 0.7 },
-  { at: 0.65, camX: 0.0,  camZ: 5.3, rotOffset: 2.2, bloom: 0.95 },
-  { at: 0.8,  camX: 0.0,  camZ: 7.6, rotOffset: 2.6, bloom: 0.35 },
-  { at: 1.0,  camX: 2.4,  camZ: 8.8, rotOffset: 3.0, bloom: 0.25 },
-];
+const BURST_MAX = 240; // cursor-trail synapse burst particles
 
 export class BrainStage {
   constructor(canvas, loadingManager) {
@@ -38,29 +35,34 @@ export class BrainStage {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    this.camera.position.set(0, 0, 6);
+    this.camera.position.set(0, 0, 8.4);
 
     this.pointer = { x: 0, y: 0 };
+    this._pointerWorld = new THREE.Vector3();
+    this._raycaster = new THREE.Raycaster();
+    this._plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     this._targetColor = new THREE.Color(0x2997ff);
     this._progress = 0;
-    this._smoothP = null;
+    this._pulse = 0;
+    this._focus = { camX: 0, camZ: 8.4, rot: 0 };
+    this._focusCur = { camX: 0, camZ: 8.4, rot: 0 };
     this._running = false;
+    this._lastBurst = 0;
 
     this.placeholder = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.6, 2),
+      new THREE.IcosahedronGeometry(2.0, 2),
       new THREE.MeshBasicMaterial({ color: 0x2997ff, wireframe: true })
     );
     this.scene.add(this.placeholder);
 
     this._applySize();
     this._initPost();
+    this._initBursts();
 
     this._onResize = () => this._applySize();
     this._onVisibility = () => { if (document.hidden) this._stop(); else this.start(); };
-    window.addEventListener('pointermove', (e) => {
-      this.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-      this.pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
-    });
+    window.addEventListener('pointermove', (e) => this._onPointer(e));
+    window.addEventListener('pointerdown', () => this.pulse());
 
     this.ready = this.loadBrain();
   }
@@ -70,6 +72,19 @@ export class BrainStage {
       const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
       return gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 8192;
     } catch { return 8192; }
+  }
+
+  _onPointer(e) {
+    this.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    this.pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
+    // Project the cursor onto the z=0 plane to spawn synapse bursts in world space.
+    this._raycaster.setFromCamera({ x: this.pointer.x, y: this.pointer.y }, this.camera);
+    this._raycaster.ray.intersectPlane(this._plane, this._pointerWorld);
+    const now = performance.now();
+    if (!this.reducedMotion && now - this._lastBurst > 26) {
+      this._lastBurst = now;
+      this._spawnBurst(this._pointerWorld, 3);
+    }
   }
 
   _applySize() {
@@ -85,8 +100,12 @@ export class BrainStage {
     if (!this.settings.bloom) { this.composer = null; return; }
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.5, 0.75);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.5, 0.72);
     this.composer.addPass(this.bloom);
+    if (this.settings.dof) {
+      this.bokeh = new BokehPass(this.scene, this.camera, { focus: 8.4, aperture: 0.0009, maxblur: 0.006 });
+      this.composer.addPass(this.bokeh);
+    }
     this._post = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uAmount: { value: 0.0018 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position,1.0); }`,
@@ -99,7 +118,7 @@ export class BrainStage {
           col.r = texture2D(tDiffuse, vUv + d).r;
           col.g = texture2D(tDiffuse, vUv).g;
           col.b = texture2D(tDiffuse, vUv - d).b;
-          float vig = smoothstep(0.95, 0.35, distance(vUv, vec2(0.5)));
+          float vig = smoothstep(0.95, 0.32, distance(vUv, vec2(0.5)));
           col *= vig;
           col += (rand(vUv + uTime) - 0.5) * 0.03;
           gl_FragColor = vec4(col, 1.0);
@@ -108,10 +127,65 @@ export class BrainStage {
     this.composer.addPass(this._post);
   }
 
+  _initBursts() {
+    const g = new THREE.BufferGeometry();
+    this._burstPos = new Float32Array(BURST_MAX * 3);
+    this._burstVel = new Float32Array(BURST_MAX * 3);
+    this._burstLife = new Float32Array(BURST_MAX);
+    g.setAttribute('position', new THREE.BufferAttribute(this._burstPos, 3));
+    g.setAttribute('aLife', new THREE.BufferAttribute(this._burstLife, 1));
+    const m = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uColor: { value: new THREE.Color(0xbfe0ff) } },
+      vertexShader: `
+        attribute float aLife; varying float vL;
+        void main(){ vL = aLife; vec4 mv = modelViewMatrix * vec4(position,1.0);
+          gl_Position = projectionMatrix * mv; gl_PointSize = (2.0 + 6.0*aLife) * (300.0/-mv.z) * 0.02 + aLife*5.0; }`,
+      fragmentShader: `
+        varying float vL; uniform vec3 uColor;
+        void main(){ float d = length(gl_PointCoord-0.5); if(d>0.5) discard;
+          gl_FragColor = vec4(uColor, smoothstep(0.5,0.0,d)*vL); }`,
+    });
+    this._burstIdx = 0;
+    this.bursts = new THREE.Points(g, m);
+    this.bursts.frustumCulled = false;
+    this.scene.add(this.bursts);
+  }
+
+  _spawnBurst(pos, n) {
+    if (!this._burstLife) return;
+    for (let k = 0; k < n; k++) {
+      const i = this._burstIdx = (this._burstIdx + 1) % BURST_MAX;
+      this._burstPos[i * 3] = pos.x + (Math.random() - 0.5) * 0.2;
+      this._burstPos[i * 3 + 1] = pos.y + (Math.random() - 0.5) * 0.2;
+      this._burstPos[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.2;
+      this._burstVel[i * 3] = (Math.random() - 0.5) * 0.05;
+      this._burstVel[i * 3 + 1] = (Math.random() - 0.5) * 0.05;
+      this._burstVel[i * 3 + 2] = (Math.random() - 0.5) * 0.05;
+      this._burstLife[i] = 1.0;
+    }
+  }
+
+  _updateBursts() {
+    if (!this._burstLife) return;
+    for (let i = 0; i < BURST_MAX; i++) {
+      if (this._burstLife[i] <= 0) continue;
+      this._burstLife[i] -= 0.02;
+      this._burstPos[i * 3] += this._burstVel[i * 3];
+      this._burstPos[i * 3 + 1] += this._burstVel[i * 3 + 1];
+      this._burstPos[i * 3 + 2] += this._burstVel[i * 3 + 2];
+    }
+    this.bursts.geometry.attributes.position.needsUpdate = true;
+    this.bursts.geometry.attributes.aLife.needsUpdate = true;
+  }
+
+  // ---- public API ----
   setBloom(strength) { if (this.bloom) this.bloom.strength = strength; }
   setProgress(p) { this._progress = p; }
+  setFocus(f) { Object.assign(this._focus, f); }
   lightRegion(color) { this._targetColor.set(color == null ? 0x2997ff : color); }
   setReducedMotion(on) { this.reducedMotion = on; }
+  pulse() { this._pulse = 1; }
 
   async loadBrain() {
     const loader = new GLTFLoader(this.loadingManager);
@@ -123,15 +197,17 @@ export class BrainStage {
       const gltf = await loader.loadAsync('assets/brain.glb?v=1');
       let mesh = null;
       gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
-      geometry = mesh ? mesh.geometry : this._fallbackGeometry();
+      geometry = mesh ? mesh.geometry : this._buildBrainGeometry();
     } catch (e) {
-      console.warn('[brain] model missing, using procedural fallback:', e.message);
-      geometry = this._fallbackGeometry();
+      console.warn('[brain] model missing, using procedural anatomical brain:', e.message);
+      geometry = this._buildBrainGeometry();
     }
+    if (geometry.index) geometry = geometry.toNonIndexed();
+    geometry.deleteAttribute('uv');
+    geometry.deleteAttribute('normal');
     geometry.computeVertexNormals();
     geometry.center();
-    if (geometry.index) geometry = geometry.toNonIndexed();
-    this._normalizeScale(geometry, 1.7);
+    this._normalizeScale(geometry, 2.6); // bigger brain
     this.brainGeometry = geometry;
 
     this.shellMaterial = this._makeShell();
@@ -146,39 +222,52 @@ export class BrainStage {
     this._buildSynapses();
   }
 
-  _fallbackGeometry() {
-    // Anatomically-evocative brain: two hemispheres, a deep sagittal fissure down
-    // the top midline, cortical gyri/sulci folds, elongated front-back, flat base.
-    const detail = this.tier === 'high' ? 40 : this.tier === 'mid' ? 26 : 16;
-    const g = new THREE.IcosahedronGeometry(1, detail);
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+  _buildBrainGeometry() {
+    const detail = this.tier === 'high' ? 44 : this.tier === 'mid' ? 28 : 18;
 
-      // Cortical folds (gyri/sulci) — layered high-frequency noise on the unit sphere.
-      const fold =
-        0.060 * Math.sin(x * 13.0) * Math.sin(z * 11.0) +
-        0.050 * Math.sin(y * 15.0 + z * 7.0) +
-        0.040 * Math.cos(x * 9.0 + y * 9.0) +
-        0.028 * Math.sin(z * 21.0) +
-        0.024 * Math.cos(y * 24.0);
-
-      // Longitudinal fissure: a groove down the top midline (x≈0), fading toward the base.
-      const fissure = -0.30 * Math.exp(-(x * x) / 0.008) * Math.max(0.0, y + 0.12);
-
-      const r = 1 + fold + fissure;
-      let px = x * r * 1.02;   // width (left–right)
-      let py = y * r * 0.82;   // height (shorter)
-      let pz = z * r * 1.30;   // length (front–back, longest axis)
-
-      // Flatten the underside of the brain.
-      if (py < -0.22) py = -0.22 + (py + 0.22) * 0.6;
-
-      pos.setXYZ(i, px, py, pz);
+    // --- Cerebrum: deformed icosphere with hemispheres, sagittal fissure, gyri ---
+    const cere = new THREE.IcosahedronGeometry(1, detail);
+    const cp = cere.attributes.position;
+    for (let i = 0; i < cp.count; i++) {
+      const x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i);
+      const gyri =
+        0.055 * Math.sin(x * 12.0) * Math.sin(z * 10.0) +
+        0.045 * Math.sin(y * 15.0 + z * 7.0) +
+        0.035 * Math.cos(x * 9.0 + y * 9.0) +
+        0.030 * Math.abs(Math.sin(x * 8.0 + z * 8.0)) - 0.015 +
+        0.024 * Math.sin(z * 22.0) +
+        0.020 * Math.cos(y * 26.0 + x * 4.0);
+      const fissure = -0.30 * Math.exp(-(x * x) / 0.008) * Math.max(0.0, y + 0.10);
+      const r = 1 + gyri + fissure;
+      let px = x * r * 1.02, py = y * r * 0.80, pz = z * r * 1.30;
+      if (py < -0.20) py = -0.20 + (py + 0.20) * 0.6; // flatten base
+      cp.setXYZ(i, px, py, pz);
     }
-    pos.needsUpdate = true;
-    g.computeVertexNormals();
-    return g;
+    cere.deleteAttribute('uv'); cere.deleteAttribute('normal');
+    const cereGeo = cere.toNonIndexed();
+
+    // --- Cerebellum: small ridged lobe at the back-bottom ---
+    const cb = new THREE.IcosahedronGeometry(1, Math.max(10, Math.floor(detail / 2)));
+    const bp = cb.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const foliation = 0.06 * Math.abs(Math.sin(y * 34.0)); // tight horizontal ridges
+      const r = 1 + foliation;
+      bp.setXYZ(i, x * r * 0.62, y * r * 0.42, z * r * 0.55);
+    }
+    cb.deleteAttribute('uv'); cb.deleteAttribute('normal');
+    const cbGeo = cb.toNonIndexed();
+    cbGeo.translate(0, -0.62, -1.02);
+
+    // --- Brainstem: tapered stalk descending from the base ---
+    const stem = new THREE.CylinderGeometry(0.10, 0.17, 0.75, 18, 4, true);
+    stem.deleteAttribute('uv'); stem.deleteAttribute('normal');
+    const stemGeo = stem.toNonIndexed();
+    stemGeo.rotateX(0.5);
+    stemGeo.translate(0, -0.82, -0.55);
+
+    const merged = mergeGeometries([cereGeo, cbGeo, stemGeo], false);
+    return merged || cereGeo;
   }
 
   _normalizeScale(geometry, target) {
@@ -192,11 +281,7 @@ export class BrainStage {
     return new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       wireframe: true,
-      uniforms: {
-        uColor: { value: new THREE.Color(0x2997ff) },
-        uGlow: { value: 0.7 },
-        uTime: { value: 0 },
-      },
+      uniforms: { uColor: { value: new THREE.Color(0x2997ff) }, uGlow: { value: 0.6 }, uTime: { value: 0 } },
       vertexShader: `
         varying vec3 vN; varying vec3 vView;
         void main() {
@@ -230,14 +315,14 @@ export class BrainStage {
 
     const pMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color(0x8fb0ff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.4 : 1.8 } },
+      uniforms: { uColor: { value: new THREE.Color(0x8fb0ff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.5 : 2.0 }, uPulse: { value: 0 } },
       vertexShader: `
-        attribute float aSeed; uniform float uTime; uniform float uSize; varying float vFire;
+        attribute float aSeed; uniform float uTime; uniform float uSize; uniform float uPulse; varying float vFire;
         void main() {
-          vFire = 0.5 + 0.5 * sin(uTime * 2.0 + aSeed * 40.0);
+          vFire = 0.5 + 0.5 * sin(uTime * 2.0 + aSeed * 40.0) + uPulse * 0.6;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(uSize * (0.6 + 0.8 * vFire) * (40.0 / -mv.z), 1.0, 4.0);
+          gl_PointSize = clamp(uSize * (0.6 + 0.8 * vFire) * (44.0 / -mv.z), 1.0, 5.0);
         }`,
       fragmentShader: `
         varying float vFire; uniform vec3 uColor;
@@ -251,8 +336,10 @@ export class BrainStage {
     this.synapses = new THREE.Points(pGeo, pMat);
     this.brainMesh.add(this.synapses);
 
-    const linkCap = this.tier === 'low' ? 400 : this.tier === 'mid' ? 1200 : 2400;
-    const links = nearestNeighborLinks(pts, 2).slice(0, linkCap);
+    const linkCap = this.tier === 'low' ? 500 : this.tier === 'mid' ? 1500 : 3000;
+    // Build links from a bounded subset of points (nearestNeighborLinks is O(n²)).
+    const linkSample = Math.min(this.settings.particles, 1600);
+    const links = nearestNeighborLinks(pts.subarray(0, linkSample * 3), 2).slice(0, linkCap);
     const lp = new Float32Array(links.length * 6);
     for (let i = 0; i < links.length; i++) {
       const [a, b] = links[i];
@@ -260,7 +347,7 @@ export class BrainStage {
     }
     const lGeo = new THREE.BufferGeometry();
     lGeo.setAttribute('position', new THREE.BufferAttribute(lp, 3));
-    const lMat = new THREE.LineBasicMaterial({ color: 0x2997ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false });
+    const lMat = new THREE.LineBasicMaterial({ color: 0x2997ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false });
     this.links = new THREE.LineSegments(lGeo, lMat);
     this.brainMesh.add(this.links);
   }
@@ -271,11 +358,11 @@ export class BrainStage {
       const attr = this.synapses.geometry.attributes.position;
       const target = this._targetPositions;
       const start = new Float32Array(target.length);
-      for (let i = 0; i < target.length; i++) start[i] = target[i] + (Math.random() - 0.5) * 8;
+      for (let i = 0; i < target.length; i++) start[i] = target[i] + (Math.random() - 0.5) * 10;
       attr.array.set(start);
       attr.needsUpdate = true;
       const t0 = performance.now();
-      const dur = 1600;
+      const dur = 1700;
       const anim = () => {
         const e = Math.min(1, (performance.now() - t0) / dur);
         const k = 1 - Math.pow(1 - e, 3);
@@ -302,32 +389,38 @@ export class BrainStage {
 
   _frame() {
     const t = performance.now() / 1000;
+    this._pulse *= 0.94;
 
-    this._smoothP = this._smoothP == null ? this._progress : this._smoothP + (this._progress - this._smoothP) * 0.08;
-    const k = lerpKeyframes(CAMERA_KEYFRAMES, this._smoothP);
-    this.camera.position.x += (k.camX - this.camera.position.x) * 0.06;
-    this.camera.position.z += (k.camZ - this.camera.position.z) * 0.06;
+    // Camera eases toward the active section's focus target (set by choreography).
+    this._focusCur.camX += (this._focus.camX - this._focusCur.camX) * 0.05;
+    this._focusCur.camZ += (this._focus.camZ - this._focusCur.camZ) * 0.05;
+    this._focusCur.rot += (this._focus.rot - this._focusCur.rot) * 0.05;
+    this.camera.position.x += (this._focusCur.camX + this.pointer.x * 0.25 - this.camera.position.x) * 0.06;
+    this.camera.position.z += (this._focusCur.camZ - this._pulse * 0.6 - this.camera.position.z) * 0.06;
     this.camera.lookAt(0, 0, 0);
 
     const obj = this.brainMesh || this.placeholder;
     if (obj) {
       if (!this.reducedMotion) {
-        obj.rotation.y = k.rotOffset + t * 0.05;
-        const breathe = 1 + 0.02 * Math.sin(t * 0.8);
+        obj.rotation.y = this._focusCur.rot + t * 0.045;
+        const breathe = 1 + 0.02 * Math.sin(t * 0.8) + this._pulse * 0.05;
         obj.scale.setScalar(breathe);
-        // Base forward tilt (-0.32 rad) tips the top toward the viewer so the sagittal
-        // fissure between the two hemispheres reads clearly; pointer adds parallax.
         obj.rotation.x += (-0.32 + this.pointer.y * 0.2 - obj.rotation.x) * 0.05;
-        obj.rotation.z += (this.pointer.x * 0.1 - obj.rotation.z) * 0.05;
       }
     }
     if (this.shellMaterial) {
       this.shellMaterial.uniforms.uTime.value = t;
+      this.shellMaterial.uniforms.uGlow.value = 0.6 + this._pulse * 0.8;
       this.shellMaterial.uniforms.uColor.value.lerp(this._targetColor, 0.05);
     }
-    if (this.synapses) this.synapses.material.uniforms.uTime.value = t;
-    if (this.links) this.links.material.opacity = 0.08 + 0.06 * (0.5 + 0.5 * Math.sin(t * 1.3));
-    this.setBloom(k.bloom);
+    if (this.synapses) {
+      this.synapses.material.uniforms.uTime.value = t;
+      this.synapses.material.uniforms.uPulse.value = this._pulse;
+    }
+    if (this.links) this.links.material.opacity = 0.07 + 0.05 * (0.5 + 0.5 * Math.sin(t * 1.3)) + this._pulse * 0.2;
+
+    this._updateBursts();
+    this.setBloom(0.5 + this._pulse * 0.9);
     if (this._post) this._post.uniforms.uTime.value = t;
 
     if (this.composer) this.composer.render();

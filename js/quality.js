@@ -1,8 +1,8 @@
 // quality.js — PURE (no three, no DOM). Device → quality tier.
 export const TIER_SETTINGS = {
-  high: { particles: 15000, dprCap: 2,    bloom: true,  dof: true  },
-  mid:  { particles: 8000,  dprCap: 1.75, bloom: true,  dof: false },
-  low:  { particles: 4000,  dprCap: 1.5,  bloom: false, dof: false },
+  high: { particles: 22000, dprCap: 2,    bloom: true,  dof: true  },
+  mid:  { particles: 11000, dprCap: 1.75, bloom: true,  dof: false },
+  low:  { particles: 5000,  dprCap: 1.5,  bloom: false, dof: false },
 };
 
 export function pickTier({ dpr, deviceMemory, coarsePointer, maxTextureSize }) {
