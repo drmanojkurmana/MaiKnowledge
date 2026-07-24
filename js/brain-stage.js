@@ -10,9 +10,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=4';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=4';
-import { buildSkeleton } from './skeleton.js?v=4';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=5';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=5';
+import { buildSkeleton } from './skeleton.js?v=5';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -215,7 +215,7 @@ export class BrainStage {
     geometry.deleteAttribute('normal');
     geometry.computeVertexNormals();
     geometry.center();
-    this._normalizeScale(geometry, 2.6); // bigger brain
+    this._normalizeScale(geometry, 2.95); // bigger brain
     this.brainGeometry = geometry;
 
     this.shellMaterial = this._makeShell();
@@ -232,7 +232,7 @@ export class BrainStage {
     // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
     this.skeletonMaterial = this._makeShell();
     this.skeletonMaterial.wireframe = false;
-    this.skeletonMaterial.uniforms.uGlow.value = 0.95;
+    this.skeletonMaterial.uniforms.uGlow.value = 1.5;
     const skel = buildSkeleton(THREE, this.skeletonMaterial);
     this.skeleton = skel.group;
     this._skeletonParts = skel.parts;
@@ -298,7 +298,7 @@ export class BrainStage {
     return new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       wireframe: true,
-      uniforms: { uColor: { value: new THREE.Color(0x2997ff) }, uGlow: { value: 0.6 }, uTime: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0x2997ff) }, uGlow: { value: 0.8 }, uTime: { value: 0 } },
       vertexShader: `
         varying vec3 vN; varying vec3 vView;
         void main() {
@@ -332,7 +332,7 @@ export class BrainStage {
 
     const pMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color(0x8fb0ff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.5 : 2.0 }, uPulse: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0x8fb0ff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.7 : 2.5 }, uPulse: { value: 0 } },
       vertexShader: `
         attribute float aSeed; uniform float uTime; uniform float uSize; uniform float uPulse; varying float vFire;
         void main() {
@@ -420,6 +420,7 @@ export class BrainStage {
     this.camera.position.y += (this._camY - this.camera.position.y) * 0.06;
     this.camera.position.z += (camZTarget - this.camera.position.z) * 0.06;
     this.camera.lookAt(0, this.camera.position.y * 0.9, 0);
+    if (this.bokeh) this.bokeh.uniforms.focus.value = Math.abs(this.camera.position.z); // keep the body sharp
 
     // Assemble the skeleton as scroll progress passes each stage's threshold.
     for (const part of this._skeletonParts) {
@@ -451,14 +452,14 @@ export class BrainStage {
     }
     if (this.shellMaterial) {
       this.shellMaterial.uniforms.uTime.value = t;
-      this.shellMaterial.uniforms.uGlow.value = 0.6 + this._pulse * 0.8;
+      this.shellMaterial.uniforms.uGlow.value = 0.85 + this._pulse * 0.9;
       this.shellMaterial.uniforms.uColor.value.lerp(this._targetColor, 0.05);
     }
     if (this.synapses) {
       this.synapses.material.uniforms.uTime.value = t;
       this.synapses.material.uniforms.uPulse.value = this._pulse;
     }
-    if (this.links) this.links.material.opacity = 0.07 + 0.05 * (0.5 + 0.5 * Math.sin(t * 1.3)) + this._pulse * 0.2;
+    if (this.links) this.links.material.opacity = 0.13 + 0.07 * (0.5 + 0.5 * Math.sin(t * 1.3)) + this._pulse * 0.25;
 
     this._updateBursts();
     this.setBloom(0.5 + this._pulse * 0.9);

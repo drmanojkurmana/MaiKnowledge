@@ -3,12 +3,14 @@
 // into stages, each with a `revealAt` scroll-progress threshold so the figure assembles
 // as the user scrolls down the body. All meshes share one material (passed in).
 
+const THICK = 1.55; // global bone-thickness multiplier (tuning: makes the figure read)
+
 function bone(THREE, mat, a, b, r1, r2) {
   const A = new THREE.Vector3(a[0], a[1], a[2]);
   const B = new THREE.Vector3(b[0], b[1], b[2]);
   const dir = new THREE.Vector3().subVectors(B, A);
   const len = dir.length() || 0.0001;
-  const geo = new THREE.CylinderGeometry(r2, r1, len, 10, 1, true);
+  const geo = new THREE.CylinderGeometry(r2 * THICK, r1 * THICK, len, 10, 1, true);
   const m = new THREE.Mesh(geo, mat);
   m.position.copy(A).add(B).multiplyScalar(0.5);
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
@@ -16,13 +18,14 @@ function bone(THREE, mat, a, b, r1, r2) {
 }
 
 function joint(THREE, mat, p, r) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), mat);
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r * THICK, 12, 10), mat);
   m.position.set(p[0], p[1], p[2]);
   return m;
 }
 
 function vertebra(THREE, mat, y, r) {
-  const m = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.42, 8, 16), mat);
+  const R = r * THICK;
+  const m = new THREE.Mesh(new THREE.TorusGeometry(R, R * 0.42, 8, 16), mat);
   m.position.set(0, y, 0);
   m.rotation.x = Math.PI / 2;
   return m;
@@ -38,7 +41,7 @@ function ribPair(THREE, mat, y, spread, depth, radius) {
       new THREE.Vector3(s * spread * 0.55, y - 0.15, depth),
       new THREE.Vector3(0, y - 0.2, depth * 1.05),
     ]);
-    const geo = new THREE.TubeGeometry(curve, 22, radius, 6, false);
+    const geo = new THREE.TubeGeometry(curve, 22, radius * THICK, 6, false);
     g.add(new THREE.Mesh(geo, mat));
   }
   return g;
@@ -97,7 +100,7 @@ export function buildSkeleton(THREE, mat) {
       new THREE.Vector3(s * 1.1, -9.1, -0.1),
       new THREE.Vector3(s * 0.9, -9.2, 0),
     ]);
-    pelvis.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.16, 6, false), mat));
+    pelvis.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.16 * THICK, 6, false), mat));
     pelvis.add(joint(THREE, mat, [s * 0.9, -9.2, 0], 0.24)); // hip socket
   }
   add(pelvis, 0.42);
