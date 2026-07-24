@@ -4,17 +4,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=14';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=14';
-import { buildSkeleton } from './skeleton.js?v=14';
-import { buildRealSkeleton } from './skeleton-real.js?v=14';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=15';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=15';
+import { buildSkeleton } from './skeleton.js?v=15';
+import { buildRealSkeleton } from './skeleton-real.js?v=15';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -204,21 +203,14 @@ export class BrainStage {
     loader.setDRACOLoader(draco);
     let geometry = null;
     this._realModel = false;
-    // 1) real STL scan if present (CC BY-SA anatomical brain — see CREDITS.md)
+    // 1) real Draco-compressed GLB scan (CC BY-SA anatomical brain — see CREDITS.md)
     try {
-      geometry = await new STLLoader(this.loadingManager).loadAsync('assets/brain.stl?v=1');
-      this._realModel = true;
-    } catch (e) { /* no stl — try glb next */ }
-    // 2) real GLB if present (auto-fit; drop-in replacement)
-    if (!geometry) {
-      try {
-        const gltf = await loader.loadAsync('assets/brain.glb');
-        let mesh = null;
-        gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
-        if (mesh) { geometry = mesh.geometry; this._realModel = true; }
-      } catch (e) { /* fall through to procedural */ }
-    }
-    // 3) procedural fallback
+      const gltf = await loader.loadAsync('assets/brain.glb?v=2');
+      let mesh = null;
+      gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+      if (mesh) { geometry = mesh.geometry; this._realModel = true; }
+    } catch (e) { /* fall through to procedural */ }
+    // 2) procedural fallback
     if (!geometry) {
       console.warn('[brain] no real model found, using procedural anatomical brain');
       geometry = this._buildBrainGeometry();
