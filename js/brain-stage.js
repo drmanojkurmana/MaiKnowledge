@@ -10,9 +10,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=5';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=5';
-import { buildSkeleton } from './skeleton.js?v=5';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=6';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=6';
+import { buildSkeleton } from './skeleton.js?v=6';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -47,7 +47,7 @@ export class BrainStage {
     this._pointerWorld = new THREE.Vector3();
     this._raycaster = new THREE.Raycaster();
     this._plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-    this._targetColor = new THREE.Color(0x2997ff);
+    this._targetColor = new THREE.Color(0xffffff);
     this._progress = 0;
     this._pulse = 0;
     this._focus = { camX: 0, camZ: 8.4, rot: 0 };
@@ -108,7 +108,7 @@ export class BrainStage {
     if (!this.settings.bloom) { this.composer = null; return; }
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.5, 0.72);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.5, 0.78);
     this.composer.addPass(this.bloom);
     if (this.settings.dof) {
       this.bokeh = new BokehPass(this.scene, this.camera, { focus: 8.4, aperture: 0.0009, maxblur: 0.006 });
@@ -144,7 +144,7 @@ export class BrainStage {
     g.setAttribute('aLife', new THREE.BufferAttribute(this._burstLife, 1));
     const m = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color(0xbfe0ff) } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) } },
       vertexShader: `
         attribute float aLife; varying float vL;
         void main(){ vL = aLife; vec4 mv = modelViewMatrix * vec4(position,1.0);
@@ -191,7 +191,7 @@ export class BrainStage {
   setBloom(strength) { if (this.bloom) this.bloom.strength = strength; }
   setProgress(p) { this._progress = p; }
   setFocus(f) { Object.assign(this._focus, f); }
-  lightRegion(color) { this._targetColor.set(color == null ? 0x2997ff : color); }
+  lightRegion() { this._targetColor.set(0xffffff); } // white throughout
   setReducedMotion(on) { this.reducedMotion = on; }
   pulse() { this._pulse = 1; }
 
@@ -232,7 +232,7 @@ export class BrainStage {
     // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
     this.skeletonMaterial = this._makeShell();
     this.skeletonMaterial.wireframe = false;
-    this.skeletonMaterial.uniforms.uGlow.value = 1.5;
+    this.skeletonMaterial.uniforms.uGlow.value = 1.2;
     const skel = buildSkeleton(THREE, this.skeletonMaterial);
     this.skeleton = skel.group;
     this._skeletonParts = skel.parts;
@@ -298,7 +298,7 @@ export class BrainStage {
     return new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       wireframe: true,
-      uniforms: { uColor: { value: new THREE.Color(0x2997ff) }, uGlow: { value: 0.8 }, uTime: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.7 }, uTime: { value: 0 } },
       vertexShader: `
         varying vec3 vN; varying vec3 vView;
         void main() {
@@ -332,7 +332,7 @@ export class BrainStage {
 
     const pMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color(0x8fb0ff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.7 : 2.5 }, uPulse: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.7 : 2.5 }, uPulse: { value: 0 } },
       vertexShader: `
         attribute float aSeed; uniform float uTime; uniform float uSize; uniform float uPulse; varying float vFire;
         void main() {
@@ -364,7 +364,7 @@ export class BrainStage {
     }
     const lGeo = new THREE.BufferGeometry();
     lGeo.setAttribute('position', new THREE.BufferAttribute(lp, 3));
-    const lMat = new THREE.LineBasicMaterial({ color: 0x2997ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false });
+    const lMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false });
     this.links = new THREE.LineSegments(lGeo, lMat);
     this.brainMesh.add(this.links);
   }
@@ -441,14 +441,17 @@ export class BrainStage {
       this.skeletonMaterial.uniforms.uColor.value.lerp(this._targetColor, 0.05);
     }
 
+    // Scroll drives a full turntable rotation top->bottom (plus gentle idle + pointer).
+    const spin = this._progress * Math.PI * 2 + t * 0.04 + this.pointer.x * 0.35;
     const obj = this.brainMesh || this.placeholder;
     if (obj) {
       if (!this.reducedMotion) {
-        obj.rotation.y = this._focusCur.rot + t * 0.045;
+        obj.rotation.y = spin;
         const breathe = 1 + 0.02 * Math.sin(t * 0.8) + this._pulse * 0.05;
         obj.scale.setScalar(breathe);
         obj.rotation.x += (-0.32 + this.pointer.y * 0.2 - obj.rotation.x) * 0.05;
       }
+      if (this.skeleton && !this.reducedMotion) this.skeleton.rotation.y = spin;
     }
     if (this.shellMaterial) {
       this.shellMaterial.uniforms.uTime.value = t;
@@ -462,7 +465,7 @@ export class BrainStage {
     if (this.links) this.links.material.opacity = 0.13 + 0.07 * (0.5 + 0.5 * Math.sin(t * 1.3)) + this._pulse * 0.25;
 
     this._updateBursts();
-    this.setBloom(0.5 + this._pulse * 0.9);
+    this.setBloom(0.32 + this._pulse * 0.7);
     if (this._post) this._post.uniforms.uTime.value = t;
 
     if (this.composer) this.composer.render();
