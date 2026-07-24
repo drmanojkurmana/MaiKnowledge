@@ -11,9 +11,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=12';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=12';
-import { buildSkeleton } from './skeleton.js?v=12';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=13';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=13';
+import { buildSkeleton } from './skeleton.js?v=13';
+import { buildRealSkeleton } from './skeleton-real.js?v=13';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -250,10 +251,29 @@ export class BrainStage {
     // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
     this.skeletonMaterial = this._makeSurfaceShell();
     this.skeletonMaterial.uniforms.uGlow.value = 1.1;
-    const skel = buildSkeleton(THREE, this.skeletonMaterial);
-    this.skeleton = skel.group;
-    this._skeletonParts = skel.parts;
-    this.scene.add(this.skeleton);
+    this._skeletonParts = [];
+    try {
+      // Real co-registered BodyParts3D skeleton, fit to hang below the brain.
+      const inner = await buildRealSkeleton(THREE, this.skeletonMaterial, this.loadingManager, this.tier);
+      inner.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(inner);
+      const size = new THREE.Vector3(), center = new THREE.Vector3();
+      box.getSize(size); box.getCenter(center);
+      inner.position.sub(center); // centre the assembled skeleton at its group origin
+      const targetH = 16;
+      const s = targetH / (size.y || 1);
+      this.skeleton = new THREE.Group();
+      this.skeleton.add(inner);
+      this.skeleton.scale.setScalar(s);
+      this.skeleton.position.y = -1.5 - targetH / 2; // top of skeleton just under the brain
+      this.scene.add(this.skeleton);
+    } catch (e) {
+      console.warn('[skeleton] real load failed, using procedural:', e.message);
+      const skel = buildSkeleton(THREE, this.skeletonMaterial);
+      this.skeleton = skel.group;
+      this._skeletonParts = skel.parts;
+      this.scene.add(this.skeleton);
+    }
   }
 
   _buildBrainGeometry() {

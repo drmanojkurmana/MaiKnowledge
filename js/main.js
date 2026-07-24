@@ -1,9 +1,9 @@
 // main.js — entry: boot after first paint, wire loader → stage → choreography.
 import * as THREE from 'three';
-import { BrainStage } from './brain-stage.js?v=12';
-import { ScrollChoreography } from './scroll-choreography.js?v=12';
-import { Loader } from './loader.js?v=12';
-import { initKineticText } from './kinetic-text.js?v=12';
+import { BrainStage } from './brain-stage.js?v=13';
+import { ScrollChoreography } from './scroll-choreography.js?v=13';
+import { Loader } from './loader.js?v=13';
+import { initKineticText } from './kinetic-text.js?v=13';
 
 async function boot() {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
