@@ -18,13 +18,14 @@ export async function buildRealSkeleton(THREE, material, manager, tier) {
   loader.setDRACOLoader(draco);
 
   const group = new THREE.Group();
-  await Promise.all(files.map(async (f) => {
+  // Sequential (not Promise.all) so a burst of parallel requests can't drop a part.
+  for (const f of files) {
     let gltf;
     try { gltf = await loader.loadAsync(`assets/skeleton/${f}.glb?v=1`); }
-    catch (e) { console.warn('[skeleton] part missing:', f, e.message); return; }
+    catch (e) { console.warn('[skeleton] part missing:', f, e.message); continue; }
     let mesh = null;
     gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
-    if (!mesh) return;
+    if (!mesh) continue;
     mesh.updateWorldMatrix(true, true);
     const geo = mesh.geometry;
     geo.applyMatrix4(mesh.matrixWorld); // bake any node transform -> keep shared coords
@@ -32,7 +33,7 @@ export async function buildRealSkeleton(THREE, material, manager, tier) {
     geo.deleteAttribute('normal');
     geo.computeVertexNormals();
     group.add(new THREE.Mesh(geo, material)); // shared coords — do NOT center per part
-  }));
+  }
   if (group.children.length === 0) throw new Error('no skeleton parts loaded');
   group.rotation.x = -Math.PI / 2; // scan Z-up -> Three Y-up (stand upright)
   return group;

@@ -1,8 +1,9 @@
 /* experience.css — Living Brain WebGL layer, integrated BEHIND the full site content. */
 
 /* ---- Fit to screen: no horizontal scroll, no zoom ---- */
+/* IMPORTANT: never put overflow-x on html/body — it computes overflow-y to `auto`
+   and breaks document scrolling. Clip the wide marquee band on #mk-root instead. */
 html, body {
-  overflow-x: hidden;
   max-width: 100%;
   touch-action: pan-y;            /* allow vertical scroll only — kills pinch/double-tap zoom */
   -webkit-text-size-adjust: 100%; /* stop iOS auto text inflation */
@@ -44,14 +45,14 @@ html, body {
   inset: 0;
   z-index: -1;              /* inside #mk-root's stacking context: above canvas, below content */
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.16);
 }
 /* Give text sitting over the brain a crisp edge + soft halo for legibility. */
 #mk-root h1, #mk-root h2, #mk-root h3, #mk-root h4, #mk-root p, #mk-root li {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 26px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92), 0 2px 26px rgba(0, 0, 0, 0.72);
 }
 @media (max-width: 760px) {
-  #mk-root::before { background: rgba(0, 0, 0, 0.42); } /* darker scrim on small screens */
+  #mk-root::before { background: rgba(0, 0, 0, 0.3); } /* lighter scrim so the brain shows brighter */
 }
 
 /* ---- Loader ---- */
