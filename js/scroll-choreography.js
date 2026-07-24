@@ -1,7 +1,7 @@
 // scroll-choreography.js — drives the brain from the REAL page sections: as each
 // section crosses the viewport centre it becomes "active", easing the camera to a
 // per-section focus and lighting the matching brain region.
-import { normalizeProgress } from './scroll-easing.js?v=13';
+import { normalizeProgress } from './scroll-easing.js?v=14';
 
 function colorForSection(el) {
   const id = (el.id || '').toLowerCase();

@@ -11,10 +11,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=13';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=13';
-import { buildSkeleton } from './skeleton.js?v=13';
-import { buildRealSkeleton } from './skeleton-real.js?v=13';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=14';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=14';
+import { buildSkeleton } from './skeleton.js?v=14';
+import { buildRealSkeleton } from './skeleton-real.js?v=14';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -248,13 +248,18 @@ export class BrainStage {
     this.scene.add(this.brainMesh);
     this._buildSynapses();
 
-    // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
+    this._skeletonParts = [];
+    // Load the (heavy) skeleton OFF the loader's critical path so the hero brain
+    // appears fast; it streams in while the user reads the hero.
+    this.loadSkeleton();
+  }
+
+  async loadSkeleton() {
     this.skeletonMaterial = this._makeSurfaceShell();
     this.skeletonMaterial.uniforms.uGlow.value = 1.1;
-    this._skeletonParts = [];
     try {
-      // Real co-registered BodyParts3D skeleton, fit to hang below the brain.
-      const inner = await buildRealSkeleton(THREE, this.skeletonMaterial, this.loadingManager, this.tier);
+      // No loadingManager passed => not tracked by the intro loader (won't block it).
+      const inner = await buildRealSkeleton(THREE, this.skeletonMaterial, undefined, this.tier);
       inner.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(inner);
       const size = new THREE.Vector3(), center = new THREE.Vector3();
@@ -265,7 +270,9 @@ export class BrainStage {
       this.skeleton = new THREE.Group();
       this.skeleton.add(inner);
       this.skeleton.scale.setScalar(s);
-      this.skeleton.position.y = -1.5 - targetH / 2; // top of skeleton just under the brain
+      // Top of skeleton (cervical spine/shoulders) tucks just under the brain base
+      // (~-2.95) so the spinal cord reads as continuing from the brainstem.
+      this.skeleton.position.y = -2.6 - targetH / 2;
       this.scene.add(this.skeleton);
     } catch (e) {
       console.warn('[skeleton] real load failed, using procedural:', e.message);
