@@ -10,10 +10,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=4';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=4';
+import { buildSkeleton } from './skeleton.js?v=4';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
+
+function easeOutBack(e) {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(e - 1, 3) + c1 * Math.pow(e - 1, 2);
+}
 
 export class BrainStage {
   constructor(canvas, loadingManager) {
@@ -46,6 +52,8 @@ export class BrainStage {
     this._pulse = 0;
     this._focus = { camX: 0, camZ: 8.4, rot: 0 };
     this._focusCur = { camX: 0, camZ: 8.4, rot: 0 };
+    this._camY = null;
+    this._skeletonParts = [];
     this._running = false;
     this._lastBurst = 0;
 
@@ -220,6 +228,15 @@ export class BrainStage {
     }
     this.scene.add(this.brainMesh);
     this._buildSynapses();
+
+    // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
+    this.skeletonMaterial = this._makeShell();
+    this.skeletonMaterial.wireframe = false;
+    this.skeletonMaterial.uniforms.uGlow.value = 0.95;
+    const skel = buildSkeleton(THREE, this.skeletonMaterial);
+    this.skeleton = skel.group;
+    this._skeletonParts = skel.parts;
+    this.scene.add(this.skeleton);
   }
 
   _buildBrainGeometry() {
@@ -391,13 +408,37 @@ export class BrainStage {
     const t = performance.now() / 1000;
     this._pulse *= 0.94;
 
-    // Camera eases toward the active section's focus target (set by choreography).
-    this._focusCur.camX += (this._focus.camX - this._focusCur.camX) * 0.05;
-    this._focusCur.camZ += (this._focus.camZ - this._focusCur.camZ) * 0.05;
-    this._focusCur.rot += (this._focus.rot - this._focusCur.rot) * 0.05;
-    this.camera.position.x += (this._focusCur.camX + this.pointer.x * 0.25 - this.camera.position.x) * 0.06;
-    this.camera.position.z += (this._focusCur.camZ - this._pulse * 0.6 - this.camera.position.z) * 0.06;
-    this.camera.lookAt(0, 0, 0);
+    // Camera DESCENDS the body as the user scrolls: y travels from the brain (skull)
+    // down to the feet; z pulls back for the wider lower body. A gentle per-section
+    // dock (camX) plus pointer parallax keeps it alive.
+    const DESCEND = 13.5;
+    this._focusCur.camX += (this._focus.camX * 0.5 - this._focusCur.camX) * 0.05;
+    const camYTarget = -this._progress * DESCEND;
+    const camZTarget = 9.0 + this._progress * 2.0 - this._pulse * 0.6;
+    this._camY = this._camY == null ? camYTarget : this._camY + (camYTarget - this._camY) * 0.06;
+    this.camera.position.x += (this._focusCur.camX + this.pointer.x * 0.3 - this.camera.position.x) * 0.06;
+    this.camera.position.y += (this._camY - this.camera.position.y) * 0.06;
+    this.camera.position.z += (camZTarget - this.camera.position.z) * 0.06;
+    this.camera.lookAt(0, this.camera.position.y * 0.9, 0);
+
+    // Assemble the skeleton as scroll progress passes each stage's threshold.
+    for (const part of this._skeletonParts) {
+      if (this.reducedMotion) { part.obj.visible = true; part.obj.scale.setScalar(1); continue; }
+      if (this._progress >= part.revealAt) {
+        if (part.appear == null) part.appear = t;
+        const e = Math.min(1, (t - part.appear) / 0.55);
+        part.obj.visible = true;
+        part.obj.scale.setScalar(easeOutBack(e));
+      } else {
+        part.obj.visible = false;
+        part.appear = null;
+        part.obj.scale.setScalar(0.001);
+      }
+    }
+    if (this.skeletonMaterial) {
+      this.skeletonMaterial.uniforms.uTime.value = t;
+      this.skeletonMaterial.uniforms.uColor.value.lerp(this._targetColor, 0.05);
+    }
 
     const obj = this.brainMesh || this.placeholder;
     if (obj) {

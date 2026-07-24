@@ -1,8 +1,9 @@
 // main.js — entry: boot after first paint, wire loader → stage → choreography.
 import * as THREE from 'three';
-import { BrainStage } from './brain-stage.js';
-import { ScrollChoreography } from './scroll-choreography.js';
-import { Loader } from './loader.js';
+import { BrainStage } from './brain-stage.js?v=4';
+import { ScrollChoreography } from './scroll-choreography.js?v=4';
+import { Loader } from './loader.js?v=4';
+import { initKineticText } from './kinetic-text.js?v=4';
 
 async function boot() {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,6 +32,8 @@ async function boot() {
   });
   choreo.start();
   window.__brainChoreo = choreo;
+
+  initKineticText();
 
   const io = new IntersectionObserver(
     (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('is-in'); }),
