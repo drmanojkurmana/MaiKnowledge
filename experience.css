@@ -1,5 +1,15 @@
 /* experience.css — Living Brain WebGL layer, integrated BEHIND the full site content. */
 
+/* ---- Fit to screen: no horizontal scroll, no zoom ---- */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+  touch-action: pan-y;            /* allow vertical scroll only — kills pinch/double-tap zoom */
+  -webkit-text-size-adjust: 100%; /* stop iOS auto text inflation */
+  overscroll-behavior-x: none;
+}
+#mk-root { overflow-x: clip; }    /* clip wide bands (marquees) so they never widen the page */
+
 /* ---- WebGL canvas: fixed, full-viewport, behind everything ---- */
 .brain-stage {
   position: fixed;

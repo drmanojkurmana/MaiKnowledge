@@ -10,10 +10,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=15';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=15';
-import { buildSkeleton } from './skeleton.js?v=15';
-import { buildRealSkeleton } from './skeleton-real.js?v=15';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=16';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=16';
+import { buildSkeleton } from './skeleton.js?v=16';
+import { buildRealSkeleton } from './skeleton-real.js?v=16';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -102,6 +102,9 @@ export class BrainStage {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // Portrait screens (aspect < 1) crop the figure's width; pull the camera back a
+    // little so the brain + skeleton fit horizontally. Clamped so it never shrinks much.
+    this._fitZ = this.camera.aspect < 1 ? Math.min(1.6, 0.78 / this.camera.aspect) : 1;
     if (this.composer) this.composer.setSize(w, h);
   }
 
@@ -493,7 +496,7 @@ export class BrainStage {
     const DESCEND = 13.5;
     this._focusCur.camX += (this._focus.camX * 0.5 - this._focusCur.camX) * 0.05;
     const camYTarget = -this._progress * DESCEND;
-    const camZTarget = 9.0 + this._progress * 2.0 - this._pulse * 0.6;
+    const camZTarget = (9.0 + this._progress * 2.0) * (this._fitZ || 1) - this._pulse * 0.6;
     this._camY = this._camY == null ? camYTarget : this._camY + (camYTarget - this._camY) * 0.06;
     this.camera.position.x += (this._focusCur.camX + this.pointer.x * 0.3 - this.camera.position.x) * 0.06;
     this.camera.position.y += (this._camY - this.camera.position.y) * 0.06;
