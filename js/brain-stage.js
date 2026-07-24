@@ -11,9 +11,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=10';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=10';
-import { buildSkeleton } from './skeleton.js?v=10';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=12';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=12';
+import { buildSkeleton } from './skeleton.js?v=12';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -226,6 +226,9 @@ export class BrainStage {
     if (geometry.index) geometry = geometry.toNonIndexed();
     geometry.deleteAttribute('uv');
     geometry.deleteAttribute('normal');
+    // Real medical scans are usually Z-up; Three is Y-up, so the brain loads lying
+    // on its side. Stand it upright.
+    if (this._realModel) geometry.rotateX(-Math.PI / 2);
     geometry.computeVertexNormals();
     geometry.center();
     this._normalizeScale(geometry, 2.95); // bigger brain
@@ -245,9 +248,8 @@ export class BrainStage {
     this._buildSynapses();
 
     // Skeleton hangs below the brain (skull). Solid glowing bones (fresnel, not wireframe).
-    this.skeletonMaterial = this._makeShell();
-    this.skeletonMaterial.wireframe = false;
-    this.skeletonMaterial.uniforms.uGlow.value = 1.2;
+    this.skeletonMaterial = this._makeSurfaceShell();
+    this.skeletonMaterial.uniforms.uGlow.value = 1.1;
     const skel = buildSkeleton(THREE, this.skeletonMaterial);
     this.skeleton = skel.group;
     this._skeletonParts = skel.parts;
@@ -313,22 +315,26 @@ export class BrainStage {
     return new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       wireframe: true,
-      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.7 }, uTime: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.7 }, uTime: { value: 0 }, uIndigo: { value: new THREE.Color(0x5a4fcf) }, uTeal: { value: new THREE.Color(0x2dd4bf) } },
       vertexShader: `
-        varying vec3 vN; varying vec3 vView;
+        varying vec3 vN; varying vec3 vView; varying float vDepth;
         void main() {
           vN = normalize(normalMatrix * normal);
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           vView = normalize(-mv.xyz);
+          vDepth = -mv.z;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: `
-        uniform vec3 uColor; uniform float uGlow; uniform float uTime;
-        varying vec3 vN; varying vec3 vView;
+        uniform vec3 uColor; uniform float uGlow; uniform float uTime; uniform vec3 uIndigo; uniform vec3 uTeal;
+        varying vec3 vN; varying vec3 vView; varying float vDepth;
         void main() {
           float fres = pow(1.0 - abs(dot(normalize(vN), normalize(vView))), 2.5);
           float pulse = 0.85 + 0.15 * sin(uTime * 1.5);
-          gl_FragColor = vec4(uColor * fres * uGlow * pulse, fres);
+          float t = clamp((vDepth - 5.5) / 6.5, 0.0, 1.0);
+          vec3 back = mix(uIndigo, uTeal, smoothstep(0.3, 1.0, t));
+          vec3 tint = mix(vec3(1.0), back, smoothstep(0.04, 0.55, t));
+          gl_FragColor = vec4(uColor * tint * fres * uGlow * pulse, fres);
         }`,
     });
   }
@@ -338,25 +344,29 @@ export class BrainStage {
   _makeSurfaceShell() {
     return new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide,
-      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.9 }, uTime: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.9 }, uTime: { value: 0 }, uIndigo: { value: new THREE.Color(0x5a4fcf) }, uTeal: { value: new THREE.Color(0x2dd4bf) } },
       vertexShader: `
-        varying vec3 vN; varying vec3 vView;
+        varying vec3 vN; varying vec3 vView; varying float vDepth;
         void main() {
           vN = normalize(normalMatrix * normal);
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           vView = normalize(-mv.xyz);
+          vDepth = -mv.z;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: `
-        uniform vec3 uColor; uniform float uGlow; uniform float uTime;
-        varying vec3 vN; varying vec3 vView;
+        uniform vec3 uColor; uniform float uGlow; uniform float uTime; uniform vec3 uIndigo; uniform vec3 uTeal;
+        varying vec3 vN; varying vec3 vView; varying float vDepth;
         void main() {
           vec3 N = normalize(vN);
           float ndl = clamp(dot(N, normalize(vec3(0.4, 0.6, 0.7))), 0.0, 1.0);
           float fres = pow(1.0 - abs(dot(N, normalize(vView))), 2.5);
           float pulse = 0.9 + 0.1 * sin(uTime * 1.5);
           float shade = (0.10 + 0.42 * ndl + 0.55 * fres) * uGlow * pulse;
-          gl_FragColor = vec4(uColor * shade, clamp(shade, 0.0, 0.85));
+          float t = clamp((vDepth - 5.5) / 6.5, 0.0, 1.0);
+          vec3 back = mix(uIndigo, uTeal, smoothstep(0.3, 1.0, t));
+          vec3 tint = mix(vec3(1.0), back, smoothstep(0.04, 0.55, t));
+          gl_FragColor = vec4(uColor * tint * shade, clamp(shade, 0.0, 0.85));
         }`,
     });
   }
@@ -378,22 +388,26 @@ export class BrainStage {
 
     const pMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.7 : 2.5 }, uPulse: { value: 0 } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uTime: { value: 0 }, uSize: { value: this.tier === 'low' ? 1.7 : 2.5 }, uPulse: { value: 0 }, uIndigo: { value: new THREE.Color(0x5a4fcf) }, uTeal: { value: new THREE.Color(0x2dd4bf) } },
       vertexShader: `
-        attribute float aSeed; uniform float uTime; uniform float uSize; uniform float uPulse; varying float vFire;
+        attribute float aSeed; uniform float uTime; uniform float uSize; uniform float uPulse; varying float vFire; varying float vDepth;
         void main() {
           vFire = 0.5 + 0.5 * sin(uTime * 2.0 + aSeed * 40.0) + uPulse * 0.6;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vDepth = -mv.z;
           gl_Position = projectionMatrix * mv;
           gl_PointSize = clamp(uSize * (0.6 + 0.8 * vFire) * (44.0 / -mv.z), 1.0, 5.0);
         }`,
       fragmentShader: `
-        varying float vFire; uniform vec3 uColor;
+        varying float vFire; varying float vDepth; uniform vec3 uColor; uniform vec3 uIndigo; uniform vec3 uTeal;
         void main() {
           float d = length(gl_PointCoord - 0.5);
           if (d > 0.5) discard;
           float a = smoothstep(0.5, 0.0, d) * (0.4 + 0.6 * vFire);
-          gl_FragColor = vec4(uColor, a);
+          float t = clamp((vDepth - 5.5) / 6.5, 0.0, 1.0);
+          vec3 back = mix(uIndigo, uTeal, smoothstep(0.3, 1.0, t));
+          vec3 tint = mix(vec3(1.0), back, smoothstep(0.04, 0.55, t));
+          gl_FragColor = vec4(uColor * tint, a);
         }`,
     });
     this.synapses = new THREE.Points(pGeo, pMat);
