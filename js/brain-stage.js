@@ -4,15 +4,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=6';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=6';
-import { buildSkeleton } from './skeleton.js?v=6';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=10';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=10';
+import { buildSkeleton } from './skeleton.js?v=10';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 
@@ -200,15 +201,27 @@ export class BrainStage {
     const draco = new DRACOLoader(this.loadingManager);
     draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/');
     loader.setDRACOLoader(draco);
-    let geometry;
+    let geometry = null;
+    this._realModel = false;
+    // 1) real STL scan if present (CC BY-SA anatomical brain — see CREDITS.md)
     try {
-      const gltf = await loader.loadAsync('assets/brain.glb?v=1');
-      let mesh = null;
-      gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
-      geometry = mesh ? mesh.geometry : this._buildBrainGeometry();
-    } catch (e) {
-      console.warn('[brain] model missing, using procedural anatomical brain:', e.message);
+      geometry = await new STLLoader(this.loadingManager).loadAsync('assets/brain.stl?v=1');
+      this._realModel = true;
+    } catch (e) { /* no stl — try glb next */ }
+    // 2) real GLB if present (auto-fit; drop-in replacement)
+    if (!geometry) {
+      try {
+        const gltf = await loader.loadAsync('assets/brain.glb');
+        let mesh = null;
+        gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+        if (mesh) { geometry = mesh.geometry; this._realModel = true; }
+      } catch (e) { /* fall through to procedural */ }
+    }
+    // 3) procedural fallback
+    if (!geometry) {
+      console.warn('[brain] no real model found, using procedural anatomical brain');
       geometry = this._buildBrainGeometry();
+      this._realModel = false;
     }
     if (geometry.index) geometry = geometry.toNonIndexed();
     geometry.deleteAttribute('uv');
@@ -218,7 +231,9 @@ export class BrainStage {
     this._normalizeScale(geometry, 2.95); // bigger brain
     this.brainGeometry = geometry;
 
-    this.shellMaterial = this._makeShell();
+    // Procedural low-poly => glowing wireframe; real scan => shaded translucent surface
+    // (so the actual gyri/sulci read, not just a rim).
+    this.shellMaterial = this._realModel ? this._makeSurfaceShell() : this._makeShell();
     this.brainMesh = new THREE.Mesh(geometry, this.shellMaterial);
     if (this.placeholder) {
       this.scene.remove(this.placeholder);
@@ -318,15 +333,46 @@ export class BrainStage {
     });
   }
 
+  // Shaded translucent surface for real scanned meshes: a fake key light reveals the
+  // gyri/sulci via N·L, plus a fresnel rim; additive + translucent so text stays readable.
+  _makeSurfaceShell() {
+    return new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide,
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) }, uGlow: { value: 0.9 }, uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vN; varying vec3 vView;
+        void main() {
+          vN = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vView = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor; uniform float uGlow; uniform float uTime;
+        varying vec3 vN; varying vec3 vView;
+        void main() {
+          vec3 N = normalize(vN);
+          float ndl = clamp(dot(N, normalize(vec3(0.4, 0.6, 0.7))), 0.0, 1.0);
+          float fres = pow(1.0 - abs(dot(N, normalize(vView))), 2.5);
+          float pulse = 0.9 + 0.1 * sin(uTime * 1.5);
+          float shade = (0.10 + 0.42 * ndl + 0.55 * fres) * uGlow * pulse;
+          gl_FragColor = vec4(uColor * shade, clamp(shade, 0.0, 0.85));
+        }`,
+    });
+  }
+
   _buildSynapses() {
     const rng = mulberry32(1337);
     const pos = this.brainGeometry.attributes.position.array;
-    const pts = sampleSurfacePoints(pos, this.settings.particles, rng);
+    // On a real scan the shaded surface carries the anatomy, so thin the particles
+    // (they accent, not dominate). Procedural relies on them, so keep the full count.
+    const count = this._realModel ? Math.min(this.settings.particles, 9000) : this.settings.particles;
+    const pts = sampleSurfacePoints(pos, count, rng);
     this._targetPositions = pts.slice();
 
     const pGeo = new THREE.BufferGeometry();
     pGeo.setAttribute('position', new THREE.BufferAttribute(pts.slice(), 3));
-    const seed = new Float32Array(this.settings.particles);
+    const seed = new Float32Array(count);
     for (let i = 0; i < seed.length; i++) seed[i] = rng();
     pGeo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
 
