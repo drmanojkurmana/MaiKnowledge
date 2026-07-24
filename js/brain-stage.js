@@ -10,10 +10,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { pickTier, TIER_SETTINGS } from './quality.js?v=16';
-import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=16';
-import { buildSkeleton } from './skeleton.js?v=16';
-import { buildRealSkeleton } from './skeleton-real.js?v=16';
+import { pickTier, TIER_SETTINGS } from './quality.js?v=17';
+import { sampleSurfacePoints, nearestNeighborLinks, mulberry32 } from './brain-math.js?v=17';
+import { buildSkeleton } from './skeleton.js?v=17';
+import { buildRealSkeleton } from './skeleton-real.js?v=17';
 
 const BURST_MAX = 240; // cursor-trail synapse burst particles
 

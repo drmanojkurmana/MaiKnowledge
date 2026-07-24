@@ -37,9 +37,21 @@ html, body {
 /* The old 2-D hero canvas is replaced by the WebGL brain. */
 #mk-hero-canvas { display: none !important; }
 
-/* Give text sitting over the brain a subtle legibility lift. */
-#mk-root h1, #mk-root h2, #mk-root h3, #mk-root p, #mk-root li {
-  text-shadow: 0 1px 20px rgba(0, 0, 0, 0.55);
+/* A subtle scrim over the 3-D (above canvas, behind content) so text stays readable. */
+#mk-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;              /* inside #mk-root's stacking context: above canvas, below content */
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.28);
+}
+/* Give text sitting over the brain a crisp edge + soft halo for legibility. */
+#mk-root h1, #mk-root h2, #mk-root h3, #mk-root h4, #mk-root p, #mk-root li {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 26px rgba(0, 0, 0, 0.7);
+}
+@media (max-width: 760px) {
+  #mk-root::before { background: rgba(0, 0, 0, 0.42); } /* darker scrim on small screens */
 }
 
 /* ---- Loader ---- */

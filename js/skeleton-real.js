@@ -6,11 +6,12 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
+// All parts load on every tier — Draco-compressed they total ~0.5MB, so there's no
+// longer a reason to drop the ribcage on mobile.
 const FULL = ['spine', 'ribcage', 'hip', 'femur', 'humerus', 'clavicle'];
-const LIGHT = ['spine', 'hip', 'femur', 'clavicle']; // mobile: skip the heaviest (ribcage/humerus)
 
 export async function buildRealSkeleton(THREE, material, manager, tier) {
-  const files = tier === 'low' ? LIGHT : FULL;
+  const files = FULL;
   const draco = new DRACOLoader(manager);
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/');
   const loader = new GLTFLoader(manager);
