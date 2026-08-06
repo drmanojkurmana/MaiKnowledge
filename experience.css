@@ -11,48 +11,14 @@ html, body {
 }
 #mk-root { overflow-x: clip; }    /* clip wide bands (marquees) so they never widen the page */
 
-/* ---- WebGL canvas: fixed, full-viewport, behind everything ---- */
-.brain-stage {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
-  display: block;
-  pointer-events: none;
-  background: #000;
-}
+/* ---- Light theme: the WebGL brain (additive glow, needs black) is hidden.
+   Background is the light gradient + soft aurora blobs; text is dark on light. ---- */
+.brain-stage { display: none !important; }
+#mk-hero-canvas { display: none !important; }
 
-/* Content sits above the brain. Make the section backgrounds transparent so the
-   living brain shows through the whole page (the CSS vars are declared inline on
-   #mk-root; !important in a stylesheet overrides an inline custom property). */
 #mk-root {
   position: relative;
   z-index: 1;
-  --bg: transparent !important;
-  --bg-alt: transparent !important;
-  --hero-bg: transparent !important;
-  background: transparent !important;
-}
-
-/* The old 2-D hero canvas is replaced by the WebGL brain. */
-#mk-hero-canvas { display: none !important; }
-
-/* A subtle scrim over the 3-D (above canvas, behind content) so text stays readable. */
-#mk-root::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;              /* inside #mk-root's stacking context: above canvas, below content */
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.16);
-}
-/* Give text sitting over the brain a crisp edge + soft halo for legibility. */
-#mk-root h1, #mk-root h2, #mk-root h3, #mk-root h4, #mk-root p, #mk-root li {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92), 0 2px 26px rgba(0, 0, 0, 0.72);
-}
-@media (max-width: 760px) {
-  #mk-root::before { background: rgba(0, 0, 0, 0.3); } /* lighter scrim so the brain shows brighter */
 }
 
 /* ---- Loader ---- */
@@ -70,6 +36,18 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 #brain-loader.done { opacity: 0; pointer-events: none; }
+
+/* Crawler / slow-WebGL failsafe: the overlay must never trap the page.
+   If loader.finish() hasn't cleared it (WebGL stall, module never loaded,
+   crawler snapshot before boot), fade it out on its own. */
+#brain-loader { animation: mkLoaderFailsafe 0.6s ease 2.2s forwards; }
+@keyframes mkLoaderFailsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+
+/* No-JS guard: if support.js never hydrates (plain fetch + screenshot tool),
+   the inline opacity:0 on reveal elements would render the page blank.
+   Show content instead. Removed the instant JS runs, so real-user
+   scroll-reveal is untouched. */
+html.no-js [data-reveal] { opacity: 1 !important; transform: none !important; }
 .loader-mark { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: #f5f5f7; display: inline-flex; align-items: baseline; }
 .loader-mark .lm-b {
   font-family: 'Sacramento', cursive;
@@ -85,5 +63,5 @@ html, body {
 .loader-pct { font-variant-numeric: tabular-nums; color: #a1a1a6; font-size: 14px; letter-spacing: 0.04em; }
 
 @media (prefers-reduced-motion: reduce) {
-  #brain-loader { transition: none; }
+  #brain-loader { transition: none; animation-delay: 2.2s; animation-duration: 0.01s; }
 }
