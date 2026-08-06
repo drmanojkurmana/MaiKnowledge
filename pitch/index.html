@@ -2454,5 +2454,43 @@ a:hover{color:var(--teal-d)}
     clearInterval(this._tick);
   }
 }</script>
+<!-- Floating toggle to hide/show the slide thumbnail rail -->
+<button id="rail-toggle" type="button" aria-label="Toggle slide sidebar" aria-pressed="false"
+  style="position:fixed;top:12px;left:12px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 12px;border-radius:980px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.92);
+  -webkit-backdrop-filter:saturate(180%) blur(10px);backdrop-filter:saturate(180%) blur(10px);
+  color:#0F172A;font:600 13px/1 'Inter',-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;
+  box-shadow:0 6px 18px -8px rgba(0,0,0,.4);cursor:pointer">&#10216; Hide</button>
+<script>
+(function () {
+  var KEY = 'pitch_rail_hidden';
+  var btn = document.getElementById('rail-toggle');
+  var hidden = false;
+  try { hidden = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  function deck() { return document.querySelector('deck-stage'); }
+  function apply() {
+    var d = deck(); if (!d) return;
+    if (hidden) d.setAttribute('no-rail', ''); else d.removeAttribute('no-rail');
+    btn.innerHTML = hidden ? '&#10217; Slides' : '&#10216; Hide';
+    btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+  }
+  function toggle(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    hidden = !hidden;
+    try { localStorage.setItem(KEY, hidden ? '1' : '0'); } catch (_) {}
+    apply();
+  }
+  // pointerdown in capture phase: fires before the deck's own global click
+  // handling can swallow it. click is swallowed so the deck doesn't also react.
+  btn.addEventListener('pointerdown', toggle, true);
+  btn.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); }, true);
+  btn.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle(e); });
+  var tries = 0;
+  (function wait() {
+    if (deck()) { apply(); return; }
+    if (tries++ < 150) setTimeout(wait, 100);
+  })();
+})();
+</script>
 </body>
 </html>
