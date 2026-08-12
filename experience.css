@@ -48,6 +48,17 @@ html, body {
    Show content instead. Removed the instant JS runs, so real-user
    scroll-reveal is untouched. */
 html.no-js [data-reveal] { opacity: 1 !important; transform: none !important; }
+
+/* Third-party failsafe: the whole page lives inside <x-dc>, and support.js hides
+   that element (x-dc{display:none!important}) until it has fetched React,
+   ReactDOM and Babel from unpkg.com and hydrated. If any of those is slow,
+   blocked or down, the site renders as a blank white page. The guard in
+   index.html sets .mk-failsafe when it catches that, and these rules show the
+   static markup instead. Both selectors outrank what they override:
+   `html.mk-failsafe x-dc` beats the injected `x-dc`, and an !important
+   declaration beats the inline opacity:0 on reveal blocks. */
+html.mk-failsafe x-dc { display: block !important; }
+html.mk-failsafe [data-reveal] { opacity: 1 !important; transform: none !important; }
 .loader-mark { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: #f5f5f7; display: inline-flex; align-items: baseline; }
 .loader-mark .lm-b {
   font-family: 'Sacramento', cursive;
