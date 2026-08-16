@@ -180,6 +180,19 @@ html[data-reduce="1"] *{animation:none!important;transition-duration:.001s!impor
       <div data-reveal data-reveal-delay="80" style="opacity:0;transform:translateY(44px);transition:opacity 1s cubic-bezier(.28,.11,.32,1),transform 1s cubic-bezier(.28,.11,.32,1);border-radius:24px;overflow:hidden;background:var(--card);border:1px solid var(--card-border)" style-hover="transform:translateY(-6px)"><div style="overflow:hidden;background:var(--bg-alt)"><img src="store-assets/raw-app-screens/03-reasoning.png" alt="Clinical reasoning" style="width:100%;height:auto;display:block"></div><div style="padding:18px 20px"><div style="font-size:17px;font-weight:600;color:var(--text)">Clinical reasoning</div><div style="font-size:14px;line-height:1.5;color:var(--text2);margin-top:4px">Live differential reasoning and next steps.</div></div></div>
       <div data-reveal data-reveal-delay="160" style="opacity:0;transform:translateY(44px);transition:opacity 1s cubic-bezier(.28,.11,.32,1),transform 1s cubic-bezier(.28,.11,.32,1);border-radius:24px;overflow:hidden;background:var(--card);border:1px solid var(--card-border)" style-hover="transform:translateY(-6px)"><div style="overflow:hidden;background:var(--bg-alt)"><img src="store-assets/raw-app-screens/05-interactions.png" alt="Drug interactions" style="width:100%;height:auto;display:block"></div><div style="padding:18px 20px"><div style="font-size:17px;font-weight:600;color:var(--text)">Drugs &amp; interactions</div><div style="font-size:14px;line-height:1.5;color:var(--text2);margin-top:4px">Database and interaction checker built in.</div></div></div>
     </div>
+    <div data-reveal style="opacity:0;transform:translateY(44px);transition:opacity 1s cubic-bezier(.28,.11,.32,1),transform 1s cubic-bezier(.28,.11,.32,1);margin-top:46px">
+      <div style="font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(245,245,247,.5);margin-bottom:6px">Now on Apple Watch</div>
+      <div style="font-size:clamp(20px,2.6vw,30px);font-weight:600;letter-spacing:-.015em;color:var(--text);margin-bottom:6px">The ward, on your wrist.</div>
+      <div style="font-size:15px;line-height:1.55;color:var(--text2);max-width:56ch;margin-bottom:20px">Critical labs, the Code Blue timer, ward tasks, bedside scores and drug doses, delivered to your wrist the moment they matter.</div>
+      <div style="display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch">
+        <img src="store-assets/watch/w1-home.png" alt="StewardMD on Apple Watch home" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+        <img src="store-assets/watch/w2-critical.png" alt="Critical labs on Apple Watch" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+        <img src="store-assets/watch/w3-codeblue.png" alt="Code Blue timer on Apple Watch" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+        <img src="store-assets/watch/w4-tasks.png" alt="Ward tasks on Apple Watch" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+        <img src="store-assets/watch/w5-calculators.png" alt="Bedside scores on Apple Watch" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+        <img src="store-assets/watch/w6-drug.png" alt="Drug doses on Apple Watch" loading="lazy" style="flex:0 0 auto;width:clamp(150px,20vw,208px);border-radius:24px;box-shadow:0 34px 74px -30px rgba(0,0,0,.72)">
+      </div>
+    </div>
   </div>
 </section>
 
@@ -861,7 +874,7 @@ class Component extends DCLogic {
         { k: '02', t: 'Connect', d: 'One system from bedside to cloud, so knowledge and context flow with the patient.' },
         { k: '03', t: 'Make accessible', d: 'Expert-grade intelligence at the point of care, wherever care is delivered.' }
       ],
-      stewardFeatures: ['Clinical decision support', 'Antibiotic stewardship', 'Drug references', '70+ calculators', 'Medical AI reasoning', 'Apple Watch (in dev)'],
+      stewardFeatures: ['Clinical decision support', 'Antibiotic stewardship', 'Drug references', '70+ calculators', 'Medical AI reasoning', 'Apple Watch companion'],
       enterpriseFeatures: ['Hospital dashboards', 'Department analytics', 'Role-based management', 'Clinical governance', 'Stewardship reports', 'HL7 / FHIR ready'],
       fundxFeatures: ['Fundus imaging analysis', 'Screening assistance', 'Clinical workflows', 'Handheld-hardware ready'],
       kardioxFeatures: ['ECG image analysis', 'Explainable AI reports', 'Learn-ECG platform', 'Privacy-first · on-device'],
