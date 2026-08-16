@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /pitch/
 
-Sitemap: https://maiknowledge.in/sitemap.xml
+Sitemap: https://maiknowledge.com/sitemap.xml
